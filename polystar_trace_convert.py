@@ -124,13 +124,39 @@ def csum(data):
     return (~s) & 0xFFFF
 
 
+def _crc32c(data):
+    crc = 0xFFFFFFFF
+    for b in data:
+        crc ^= b
+        for _ in range(8):
+            crc = (crc >> 1) ^ (0x82F63B78 if crc & 1 else 0)
+    return (~crc) & 0xFFFFFFFF
+
+
 def verify(frame):
-    ip = frame[14:34]
-    ok_ip = csum(ip) == 0
-    tcp = frame[34:]
-    pseudo = frame[26:34] + struct.pack("!BBH", 0, 6, len(tcp))
-    ok_tcp = csum(pseudo + tcp) == 0
-    return ok_ip, ok_tcp
+    """Check IP header checksum and TCP checksum / SCTP CRC32c, following VLAN tags.
+
+    Returns (ip_ok, l4_ok, l4_name); ok values are None when the layer is absent/unsupported.
+    """
+    p, et = 12, struct.unpack("!H", frame[12:14])[0]
+    p = 14
+    while et in (0x8100, 0x88A8, 0x9100) and p + 4 <= len(frame):  # 802.1Q / QinQ
+        et = struct.unpack("!H", frame[p + 2:p + 4])[0]
+        p += 4
+    if et != 0x0800:
+        return None, None, "non-IPv4"
+    ihl = (frame[p] & 0x0F) * 4
+    ip_ok = csum(frame[p:p + ihl]) == 0
+    total = struct.unpack("!H", frame[p + 2:p + 4])[0]
+    proto = frame[p + 9]
+    l4 = frame[p + ihl:p + total]
+    if proto == 6:
+        pseudo = frame[p + 12:p + 20] + struct.pack("!BBH", 0, 6, len(l4))
+        return ip_ok, csum(pseudo + l4) == 0, "TCP"
+    if proto == 132:  # SCTP: CRC32c over the packet with the checksum field zeroed
+        got = struct.unpack("<I", l4[8:12])[0]
+        return ip_ok, _crc32c(l4[:8] + b"\0\0\0\0" + l4[12:]) == got, "SCTP"
+    return ip_ok, None, f"proto {proto}"
 
 
 USAGE = """\
@@ -150,7 +176,7 @@ Example:
 
 Notes:
   - Frames are rebuilt from the decoded field tree (the trace has no raw hex).
-  - Each frame is checked with IP and TCP checksums and reported as OK/BAD.
+  - Each frame is checked with the IP header checksum and TCP checksum / SCTP CRC32c and reported as OK/BAD.
   - Output directory must already exist.
 """
 
@@ -243,12 +269,13 @@ def message_json(msg, idx, tz):
                     hdr[key] = val
             d["diameter"] = {"header": hdr, "avps": avps}
         else:
-            fields = {}
-            for k in t.findall("t:messageNode", NS):
-                v = k.find("t:value", NS).text.strip()
-                if " = " in v and not k.findall("t:messageNode", NS):
-                    key, val = v.split(" = ", 1)
-                    fields[re.sub(r"^[01-]{4,}\s", "", key)] = val
+            leaves, fields = [], {}
+            _leaves(t, leaves)
+            for key, val in leaves:
+                i, k2 = 2, key
+                while k2 in fields:
+                    k2 = f"{key} #{i}"; i += 1
+                fields[k2] = val
             d[title.lower()] = fields
     return d
 
@@ -280,8 +307,9 @@ def main():
         ts = parse_ts({p.get("name"): p.text for p in m.findall("t:parameters/t:parameter", NS)}["Timestamp"], tz)
         e = ts.timestamp()
         pcap += struct.pack("<IIII", int(e), int((e % 1) * 1e6), len(frame), len(frame)) + frame
-        ok_ip, ok_tcp = verify(frame)
-        print(f"msg {i}: {len(frame)} bytes  IP checksum {'OK' if ok_ip else 'BAD'}  TCP checksum {'OK' if ok_tcp else 'BAD'}")
+        ok_ip, ok_l4, l4 = verify(frame)
+        fmt = lambda v: "n/a" if v is None else ("OK" if v else "BAD")
+        print(f"msg {i}: {len(frame)} bytes  IP checksum {fmt(ok_ip)}  {l4} checksum {fmt(ok_l4)}")
         js.append(message_json(m, i, tz))
     open(prefix + ".pcap", "wb").write(pcap)
     json.dump({"source": src.split("/")[-1], "messages": js}, open(prefix + ".json", "w"), indent=2, ensure_ascii=False)

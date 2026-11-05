@@ -7,7 +7,7 @@ Converts a Polystar OSIX trace export (`traceSchemaV1.0` XML) into:
 
 The trace XML contains no raw hex, only a decoded field tree where every field has a bit offset, bit size and value. The script writes each field back into a frame buffer at its offset to rebuild the original bytes.
 
-Tested on Diameter Credit-Control (Gx/Ro style) traces over Ethernet / IPv4 / TCP.
+Tested on Diameter Credit-Control (Gx/Ro style) traces over Ethernet / IPv4 with TCP or SCTP, with and without 802.1Q VLAN tags.
 
 ## Requirements
 
@@ -71,9 +71,10 @@ The script prints one line per message with the result of two checks:
 
 ```
 msg 0: 802 bytes  IP checksum OK  TCP checksum OK
+msg 3: 826 bytes  IP checksum OK  SCTP checksum OK
 ```
 
-The TCP checksum covers the whole payload, so `OK` means the rebuilt frame matches the bytes originally on the wire. `BAD` means some field was encoded wrongly. See Limitations.
+Each frame is checked in two steps: the IP header checksum, then the TCP checksum or the SCTP CRC32c (VLAN tags are followed automatically). Both cover the whole packet, so `OK` means the rebuilt frame matches the bytes originally on the wire. `BAD` means some field was encoded wrongly. `n/a` means that layer is absent or not supported by the checker. See Limitations.
 
 ### JSON layout
 
@@ -89,7 +90,7 @@ The TCP checksum covers the whole payload, so `OK` means the rebuilt frame match
       "Dest Address": "10.30.50.240; MZF5-BOR-VIP",
       "ethernet": { "...": "..." },
       "ip":       { "...": "..." },
-      "tcp":      { "...": "..." },
+      "tcp":      { "...": "..." },   // or "sctp" for SCTP messages
       "diameter": {
         "header": { "CommandCode": "272 (CreditControl)", "...": "..." },
         "avps": [
@@ -114,4 +115,4 @@ The TCP checksum covers the whole payload, so `OK` means the rebuilt frame match
 - **Timestamps are assumed to be UTC+1** unless you pass `--tz-offset-hours`. Compare a message's `Timestamp` with its Diameter `Event-Timestamp` (which states UTC) to confirm the offset.
 - **Number vs text is inferred from the decoded value.** A text value made only of digits, whose size is exactly 8 bits per digit, can be mistaken for a number. If you see `BAD` checksums on a new trace, look at such fields first.
 - **MCC/MNC pairs are special-cased** to the standard 3-byte BCD encoding used in `3GPP-User-Location-Info`. Other vendor-specific encodings may need new rules in `leaf_bytes()` / `build_frame()`.
-- Only Ethernet / IPv4 / TCP frames have been tested. Other transports (SCTP, IPv6, VLAN tags) have not.
+- Tested on Ethernet / IPv4 with TCP or SCTP, plain or 802.1Q VLAN-tagged. IPv6, IP tunnels and other transports have not been tested, and the checker reports `n/a` for non-IPv4 frames.
