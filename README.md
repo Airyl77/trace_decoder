@@ -109,6 +109,16 @@ Each frame is checked in two steps: the IP header checksum, then the TCP checksu
 - Grouped AVPs have a nested `avps` list.
 - Composite AVPs (for example `3GPP-User-Location-Info`) have a `fields` object with each sub-field.
 
+## Sample and regression check
+
+`samples/sample_voice_trace.xml` is an anonymised Diameter trace (8 messages). Run the check after any change:
+
+```bash
+python3 check_samples.py
+```
+
+It converts every `samples/*.xml` and exits non-zero if any frame fails its checksum.
+
 ## Limitations
 
 - **Only the messages in the trace are written.** There is no TCP handshake or ACK-only traffic, so Wireshark may show TCP sequence gaps.
