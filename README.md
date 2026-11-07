@@ -35,6 +35,15 @@ python3 polystar_trace_gui.py
 
 Pick the input XML, optionally pick an output folder (default: the input file's folder), set the timezone offset and press Convert. Outputs are named after the input file (`trace.xml` -> `trace.pcap`, `trace.json`). Needs tkinter (`sudo apt install python3-tk` on Debian/Ubuntu; bundled on Windows/macOS).
 
+## Standalone executable
+
+```bash
+pip install pyinstaller
+python3 build_exe.py
+```
+
+Produces a single-file GUI app at `dist/polystar-trace-converter` (`.exe` on Windows). PyInstaller cannot cross-compile, so build on the OS you want to run it on. Python and tkinter are bundled, so the target machine needs neither.
+
 ## Examples
 
 Basic conversion:
