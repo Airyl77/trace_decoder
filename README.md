@@ -44,6 +44,8 @@ python3 build_exe.py
 
 Produces a single-file GUI app at `dist/polystar-trace-converter` (`.exe` on Windows). PyInstaller cannot cross-compile, so build on the OS you want to run it on. Python and tkinter are bundled, so the target machine needs neither.
 
+A GitHub Actions workflow (`.github/workflows/build-exe.yml`) builds the Windows exe: run it manually from the Actions tab (download the artifact), or push a tag like `v1.0` to also attach the exe to a GitHub release.
+
 ## Examples
 
 Basic conversion:
