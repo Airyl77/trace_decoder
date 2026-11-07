@@ -7,7 +7,7 @@ back into a bit buffer at its offset.
 
 Usage: polystar_trace_convert.py trace.xml out_prefix [--tz-offset-hours 1]
 """
-import json, re, struct, sys, ipaddress
+import json, os, re, struct, sys, ipaddress
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
 
@@ -296,6 +296,11 @@ def main():
             off = float(args[args.index("--tz-offset-hours") + 1])
         except (IndexError, ValueError):
             sys.exit("error: --tz-offset-hours needs a number, e.g. --tz-offset-hours 1\n\n" + USAGE)
+    convert(src, prefix, off)
+
+
+def convert(src, prefix, off=1.0, log=print):
+    """Convert trace XML `src` to `<prefix>.pcap` and `<prefix>.json`. `log` receives one line per message."""
     tz = timezone(timedelta(hours=off))
     root = ET.parse(src).getroot()
     msgs = root.findall(".//t:call/t:messages/t:message", NS) + root.findall("t:messages/t:message", NS)
@@ -309,10 +314,10 @@ def main():
         pcap += struct.pack("<IIII", int(e), int((e % 1) * 1e6), len(frame), len(frame)) + frame
         ok_ip, ok_l4, l4 = verify(frame)
         fmt = lambda v: "n/a" if v is None else ("OK" if v else "BAD")
-        print(f"msg {i}: {len(frame)} bytes  IP checksum {fmt(ok_ip)}  {l4} checksum {fmt(ok_l4)}")
+        log(f"msg {i}: {len(frame)} bytes  IP checksum {fmt(ok_ip)}  {l4} checksum {fmt(ok_l4)}")
         js.append(message_json(m, i, tz))
     open(prefix + ".pcap", "wb").write(pcap)
-    json.dump({"source": src.split("/")[-1], "messages": js}, open(prefix + ".json", "w"), indent=2, ensure_ascii=False)
+    json.dump({"source": os.path.basename(src), "messages": js}, open(prefix + ".json", "w"), indent=2, ensure_ascii=False)
 
 
 if __name__ == "__main__":

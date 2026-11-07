@@ -27,6 +27,14 @@ python3 polystar_trace_convert.py <trace.xml> <output_prefix> [--tz-offset-hours
 
 Run it with no arguments (or `-h` / `--help`) to print the usage text.
 
+## GUI
+
+```bash
+python3 polystar_trace_gui.py
+```
+
+Pick the input XML, optionally pick an output folder (default: the input file's folder), set the timezone offset and press Convert. Outputs are named after the input file (`trace.xml` -> `trace.pcap`, `trace.json`). Needs tkinter (`sudo apt install python3-tk` on Debian/Ubuntu; bundled on Windows/macOS).
+
 ## Examples
 
 Basic conversion:
